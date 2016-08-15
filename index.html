@@ -1,15 +1,82 @@
-<!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8">
-    <link rel="stylesheet" type="text/css" href="https://cdn.mxpnl.com/libs/mixpanel-platform/css/reset.css">
-    <link rel="stylesheet" type="text/css" href="https://cdn.mxpnl.com/libs/mixpanel-platform/build/mixpanel-platform.v0.latest.min.css">
-    <script src="https://cdn.mxpnl.com/libs/mixpanel-platform/build/mixpanel-platform.v0.latest.min.js"></script>
-  </head>
-  <body class="mixpanel-platform-body">
-    <h1>Hello, World!</h1>
-    <script>
-      // Run queries and display results here
-    </script>
-  </body>
+<head>
+	<link href="http://getbootstrap.com/dist/css/bootstrap.min.css" rel="stylesheet">
+	<link href="http://getbootstrap.com/examples/justified-nav/justified-nav.css" rel="stylesheet">
+	<script src="http://d3js.org/d3.v3.min.js" charset="utf-8"></script>
+	<script src="https://cdn.mxpnl.com/libs/mixpanel-platform/build/mixpanel-platform.v0.latest.min.js"></script>
+</head>
+<body>
+	<script id='query'>
+		function getDaysSinceStart(e,a){var t=Math.floor((a-e)/864e5);return t>=0?t:t+1}function getNumDaysInRange(){var e=params.from_date.split("-");e=new Date(e[0],e[1]-1,e[2]).valueOf();var a=params.to_date.split("-");return a=new Date(a[0],a[1]-1,a[2]).valueOf()+864e5,(a-e)/864e5}function stateCreate(e,a){e=e||{revenue:[]};var t=function(a){if(e.start_time||a.name!=params.start_event){if(e.start_time&&a.name==params.revenue_event){var t={};t.days_since_start=getDaysSinceStart(e.start_time,a.time),t.amount=a.properties[params.revenue_prop],e.revenue.push(t)}}else e.start_time=a.time,e.possible_days=numPossibleDays(a.time),e.start_propval=a.properties[params.start_prop]};return _.each(a,t),e}function summarizer(e,a){var t={},r={},n=function(e,a){for(var t=e.days_since_start;a>=t;t++)r[t]=r[t]+Number(e.amount)||Number(e.amount)};_.each(a,function(e){for(var a=0;a<=e.value.possible_days;a++)t[a]=t[a]+1||1;var r=e.value.possible_days;_.each(e.value.revenue,function(e){n(e,r)})});var u=function(e){for(var a in e)r[a]=r[a]+e[a]||e[a]},s=function(e){for(var a in e)t[a]=t[a]+e[a]||e[a]};return _.each(_.pluck(e,"results"),u),_.each(_.pluck(e,"count"),s),{results:r,count:t}}function resultMapper(e){var a={};a.key=e.key[0],a.values=[];for(var t=0;t<getNumDaysInRange();t++){var r={};r.bucket=t,r.count=e.value.count[t]?e.value.count[t]:0,r.sum=e.value.results[t]?e.value.results[t]:0,r.average=e.value.count[t]?Math.round(10*e.value.results[t]/e.value.count[t])/10:"n/a",a.values.push(r),r={}}return a}function numPossibleDays(e){var a=params.to_date.split("-");return a=new Date(a[0],a[1]-1,a[2]).valueOf()+864e5,Math.floor((a-e)/864e5)}function main(){return Events({from_date:params.from_date,to_date:params.to_date,event_selectors:[{event:params.start_event},{event:params.revenue_event}]}).groupByUser(stateCreate).filter(function(e){return e.value.start_time}).groupBy([function(e){return e.value.start_propval}],summarizer).map(resultMapper)}
+	</script>
+	<div class="container">
+	<div class="jumbotron">
+	</div>
+	</div>
+	<svg id="visualisation" width="1000" height="500"></svg>
+	<script>
+		var params = {
+			'from_date': '2016-01-25'
+			,'to_date': '2016-02-22'
+			,'start_event': 'View Home Page'
+			,'start_prop': 'Campaign Source'
+			,'revenue_event': 'Process Payment'
+			,'revenue_prop': 'Amount'
+		};
+
+		// var params = {
+		// 	'from_date': '2016-01-25'
+		// 	,'to_date': '2016-02-22'
+		// 	,'start_event': 'App Open'
+		// 	,'start_prop': 'Campaign Source'
+		// 	,'revenue_event': 'In-App Purchase'
+		// 	,'revenue_prop': 'amount'
+		// };
+
+
+		var script = document.getElementById('query').innerHTML;
+		MP.api.custom_query(script, params).done(function(results) {
+			console.log(results);
+			var maxVal = _.chain(results)
+						.pluck('values')
+						.flatten()
+						.pluck('average')
+						.max()
+						.value();
+			var maxBucket = _.chain(results)
+							.pluck('values')
+							.flatten()
+							.pluck('bucket')
+							.max()
+							.value();
+			var vis = d3.select("#visualisation"),
+				WIDTH = 1000,
+				HEIGHT = 500,
+				MARGINS = {
+				top: 20,
+				right: 20,
+				bottom: 20,
+				left: 50
+			},
+			xScale = d3.scale.linear().range([MARGINS.left, WIDTH - MARGINS.right]).domain([0,maxBucket]);
+			yScale = d3.scale.linear().range([HEIGHT - MARGINS.top, MARGINS.bottom]).domain([0,maxVal * 1.1]);
+			xAxis = d3.svg.axis().scale(xScale);
+			yAxis = d3.svg.axis().scale(yScale);
+			vis.append("svg:g").attr("transform", "translate(0," + (HEIGHT - MARGINS.bottom) + ")").call(xAxis);
+			yAxis = d3.svg.axis().scale(yScale).orient("left");
+			vis.append("svg:g").attr("transform", "translate(" + (MARGINS.left) + ",0)").call(yAxis);
+			var colors = ['blue', 'green', 'red', 'brown', 'yellow', 'purple'];
+			var data = {};
+			_.each(results, function(item) {
+				data[item.key] = {};
+				data[item.key].lineGen = d3.svg.line().x(function(d) {
+					return xScale(d.bucket);
+				}).y(function(d) {
+					return yScale(d.average);
+				});
+				vis.append('svg:path').attr('d', data[item.key].lineGen(item.values)).attr('stroke', colors.pop()).attr('stroke-width', 2).attr('fill', 'none');
+			})
+		});
+	</script>
+</body>
 </html>
